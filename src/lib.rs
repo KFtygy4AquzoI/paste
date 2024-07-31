@@ -204,6 +204,22 @@ fn expand(
     let mut tokens = input.into_iter().peekable();
     loop {
         let token = tokens.next();
+        if let (Some(TokenTree::Punct(punct)), Some(TokenTree::Group(group))) = (&token, tokens.peek()) {
+            let delimiter = group.delimiter();
+            let content = group.stream();
+            if punct.as_char() == '#' && delimiter == Delimiter::Bracket && is_skip_attr(&content) {
+                *contains_paste = true;
+                let _ = tokens.next();
+                if let Some(TokenTree::Group(group)) = tokens.next() {
+                    let content = group.stream();
+                    println!("DEBUG content {:#?}", &content);
+                    expanded.extend(content);
+                } else {
+                    panic!("must be group after #[skip_paste]");
+                }
+                continue;
+            }
+        }
         if let Some(group) = prev_none_group.take() {
             if match (&token, tokens.peek()) {
                 (Some(TokenTree::Punct(fst)), Some(TokenTree::Punct(snd))) => {
@@ -329,6 +345,14 @@ fn is_single_interpolation_group(input: &TokenStream) -> bool {
     }
 
     state == State::Ident || state == State::Literal || state == State::Lifetime
+}
+
+fn is_skip_attr(input: &TokenStream) -> bool {
+    let mut tokens = input.clone().into_iter();
+    match &tokens.next() {
+        Some(TokenTree::Ident(ident)) if ident.to_string() == "skip_paste" => true,
+        _ => false,
+    }
 }
 
 fn is_paste_operation(input: &TokenStream) -> bool {
